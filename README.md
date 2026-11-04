@@ -39,16 +39,6 @@ python starboard_bot.py
 
 If `BOT_TOKEN` is missing or invalid, the bot stops right away. The bot only works while it's running, so run it on a computer that stays on. Stop it with Ctrl+C, and restart it after editing `.env` by hand.
 
-### In the background on Windows
-
-From an Administrator PowerShell in this folder:
-
-```
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-This checks the token with Telegram and installs a `StarboardBot` task that starts with Windows and restarts the bot if it stops. `uninstall.ps1` removes it.
-
 ## Good to know
 
 - Only one copy of the bot can run per token.
