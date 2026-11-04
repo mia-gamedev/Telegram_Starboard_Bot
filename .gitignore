@@ -5,3 +5,6 @@ bot.log*
 __pycache__/
 .venv/
 *.zip
+*.ps1
+Claude.MD
+.claude/
