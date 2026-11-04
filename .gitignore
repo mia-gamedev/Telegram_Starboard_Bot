@@ -1,0 +1,7 @@
+.env
+.env.tmp
+bot_data.pickle
+bot.log*
+__pycache__/
+.venv/
+*.zip
