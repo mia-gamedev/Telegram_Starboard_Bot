@@ -3,7 +3,7 @@
 A Discord-style starboard for Telegram groups with topics. When a post in the watched topic (e.g. **Music Sharing**) gets 2 ❤ reactions, the bot forwards it to the **starboard** topic. One running bot can serve any number of groups, each with its own topics and settings.
 
 - Only posts with an audio file or a link count. Plain chat is ignored.
-- Posts older than a month no longer count.
+- Posts can collect hearts for up to a month. Busy groups get a shorter window: the bot remembers each group's newest 1,000 links, so in a group posting 500 a day a post has about 2 days.
 - Each post is forwarded once. Telegram doesn't copy reactions when forwarding, so the bot puts the first ❤ on the starboard copy and everyone can add theirs there.
 
 ## Setup
@@ -58,4 +58,4 @@ This checks the token with Telegram and installs a `StarboardBot` task that star
 - Coming from the version that kept setup in `.env`: run `/setup` and `/watch` again. `GROUP_ID`, the topic IDs and the settings in `.env` are no longer read.
 - The bot logs to the console and to `bot.log` next to it. The log is capped at about 2 MB: `bot.log` plus one older `bot.log.1`.
 - `.env` holds the bot token. Keep it private.
-- `MAX_POST_AGE` in `config.py` sets how long posts can be starred.
+- `MAX_POST_AGE` and `MAX_TRACKED_POSTS` in `config.py` set how long, and how many of a group's latest posts, can still be starred.

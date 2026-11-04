@@ -12,7 +12,7 @@ from telegram.ext import (
 
 import commands
 import database
-from config import BOT_TOKEN, MAX_POST_AGE
+from config import BOT_TOKEN, MAX_POST_AGE, MAX_TRACKED_POSTS
 from database import Group, Post
 
 logger = logging.getLogger(__name__)
@@ -32,15 +32,18 @@ async def remember_music_post(update: Update, context: Context) -> None:
     # Reaction updates lack the topic, so remember posts as they're made.
     post = update.message
     group = database.find_group(post.chat_id)
-    if group and group.is_set_up and post.message_thread_id == group.music_topic_id:
-        database.remember_post(post.chat_id, post.message_id, post.from_user.id, post.date)
+    if group is None or not group.is_set_up or post.message_thread_id != group.music_topic_id:
+        return
+    database.remember_post(post.chat_id, post.message_id, post.from_user.id, post.date)
+    # Busy groups get a shorter wait instead of unbounded storage.
+    database.forget_oldest_posts(post.chat_id, keep=MAX_TRACKED_POSTS)
 
 
 async def track_hearts(update: Update, context: Context) -> None:
     group = database.find_group(update.effective_chat.id)
     if group is None or not group.is_set_up:
         return
-    database.forget_posts_before(datetime.now(timezone.utc) - MAX_POST_AGE)
+    database.forget_group_posts_before(group.chat_id, post_age_cutoff())
     message_id = (update.message_reaction or update.message_reaction_count).message_id
     post = database.find_post(group.chat_id, message_id)
     if post is None:
@@ -50,6 +53,10 @@ async def track_hearts(update: Update, context: Context) -> None:
     if post.hearts < group.required_hearts:
         return
     await promote_to_starboard(context, group, message_id)
+
+
+def post_age_cutoff() -> datetime:
+    return datetime.now(timezone.utc) - MAX_POST_AGE
 
 
 def count_hearts(update: Update, post: Post, group: Group) -> int:
@@ -84,6 +91,8 @@ async def log_error(update: object, context: Context) -> None:
 
 
 def main() -> None:
+    # Groups that went quiet only get their old posts cleared here.
+    database.forget_posts_before(post_age_cutoff())
     app = Application.builder().token(BOT_TOKEN).build()
     commands.register(app)
     app.add_handler(MessageHandler(MUSIC_POST_FILTER, remember_music_post))

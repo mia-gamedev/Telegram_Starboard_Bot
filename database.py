@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS groups (
     emoji TEXT NOT NULL DEFAULT '{DEFAULT_EMOJI}',
     self_stars INTEGER NOT NULL DEFAULT 1
 );
+-- WITHOUT ROWID keeps posts sorted by group and message, with no hidden row id or extra index.
 CREATE TABLE IF NOT EXISTS posts (
     chat_id INTEGER NOT NULL,
     message_id INTEGER NOT NULL,
@@ -22,8 +23,7 @@ CREATE TABLE IF NOT EXISTS posts (
     posted_at INTEGER NOT NULL,
     hearts INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (chat_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS posts_by_age ON posts (posted_at);
+) WITHOUT ROWID;
 """
 GROUP_SETTINGS = {"music_topic_id", "starboard_topic_id", "required_hearts", "emoji", "self_stars"}
 
@@ -91,6 +91,15 @@ def remember_post(chat_id: int, message_id: int, author_id: int, posted_at: date
     )
 
 
+def forget_oldest_posts(chat_id: int, keep: int) -> None:
+    # Message ids grow over time, so everything below the newest `keep` ids is older.
+    connection.execute(
+        "DELETE FROM posts WHERE chat_id = ? AND message_id <= ("
+        "SELECT message_id FROM posts WHERE chat_id = ? ORDER BY message_id DESC LIMIT 1 OFFSET ?)",
+        (chat_id, chat_id, keep),
+    )
+
+
 def find_post(chat_id: int, message_id: int) -> Post | None:
     row = connection.execute(
         "SELECT * FROM posts WHERE chat_id = ? AND message_id = ?", (chat_id, message_id)
@@ -108,6 +117,12 @@ def save_hearts(post: Post) -> None:
 def forget_post(chat_id: int, message_id: int) -> None:
     connection.execute(
         "DELETE FROM posts WHERE chat_id = ? AND message_id = ?", (chat_id, message_id)
+    )
+
+
+def forget_group_posts_before(chat_id: int, cutoff: datetime) -> None:
+    connection.execute(
+        "DELETE FROM posts WHERE chat_id = ? AND posted_at < ?", (chat_id, int(cutoff.timestamp()))
     )
 
 

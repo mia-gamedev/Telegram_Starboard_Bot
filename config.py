@@ -22,6 +22,7 @@ logging.getLogger("httpx").setLevel(logging.WARNING)  # request logs contain the
 logger = logging.getLogger(__name__)
 
 MAX_POST_AGE = timedelta(days=30)
+MAX_TRACKED_POSTS = 1000
 DEFAULT_REQUIRED_HEARTS = 2
 DEFAULT_EMOJI = ReactionEmoji.RED_HEART.value
 ALLOWED_EMOJI = frozenset(emoji.value for emoji in ReactionEmoji)
