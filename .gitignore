@@ -1,6 +1,6 @@
 .env
 .env.tmp
-bot_data.pickle
+starboard.db*
 bot.log*
 __pycache__/
 .venv/

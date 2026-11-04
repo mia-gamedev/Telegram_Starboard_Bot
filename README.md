@@ -1,6 +1,6 @@
 # Starboard Bot
 
-A Discord-style starboard for a Telegram group with topics. When a post in the watched topic (e.g. **Music Sharing**) gets 2 ❤ reactions, the bot forwards it to the **starboard** topic.
+A Discord-style starboard for Telegram groups with topics. When a post in the watched topic (e.g. **Music Sharing**) gets 2 ❤ reactions, the bot forwards it to the **starboard** topic. One running bot can serve any number of groups, each with its own topics and settings.
 
 - Only posts with an audio file or a link count. Plain chat is ignored.
 - Posts older than a month no longer count.
@@ -14,7 +14,7 @@ A Discord-style starboard for a Telegram group with topics. When a post in the w
    - send `/setup` in the topic that should become the starboard,
    - send `/watch` in the topic whose posts can be starred.
 
-Both work right away and are saved to `.env`, so they survive restarts and crashes. Send them again in another topic to move the starboard or watch a different topic.
+Both work right away and are saved in the bot's database, so they survive restarts and crashes. Send them again in another topic to move the starboard or watch a different topic.
 
 ## Settings
 
@@ -26,7 +26,7 @@ Group admins can change the rules with `/settings` in the group. On its own, it 
 | `emoji` | ❤ | `/settings emoji 🔥` | The reaction that counts. Must be one Telegram allows as a reaction. |
 | `self-stars` | true | `/settings self-stars false` | Whether the author's own reaction counts. |
 
-Settings are saved to `.env` too.
+Each group has its own settings, saved in the database too.
 
 ## Run it
 
@@ -52,10 +52,10 @@ This checks the token with Telegram and installs a `StarboardBot` task that star
 ## Good to know
 
 - Only one copy of the bot can run per token.
-- To stop anyone from adding the bot to other groups, send `/setjoingroups` to @BotFather and choose *Disable* once the bot is in your group.
-- Once set up, the bot ignores `/setup`, `/watch` and `/settings` from other groups. To move it to another group, remove `GROUP_ID` from `.env` and restart it.
+- Anyone can add the bot to their group and set it up there; admins can only change their own group. To keep it to your own groups, send `/setjoingroups` to @BotFather and choose *Disable* once it's in them.
 - Telegram doesn't tell bots which topic a reacted message is in, so the bot remembers watched posts as they're made. Posts from before it was running, or before `/watch`, never count.
-- Tracked posts are saved in `bot_data.pickle`, so restarts are fine.
+- Setup, settings and tracked posts are kept in `starboard.db` (SQLite) next to the bot. Each change is saved as it happens, so restarts and crashes are fine. The bot stores only numeric Telegram IDs, no names or message text.
+- Coming from the version that kept setup in `.env`: run `/setup` and `/watch` again. `GROUP_ID`, the topic IDs and the settings in `.env` are no longer read.
 - The bot logs to the console and to `bot.log` next to it. The log is capped at about 2 MB: `bot.log` plus one older `bot.log.1`.
 - `.env` holds the bot token. Keep it private.
 - `MAX_POST_AGE` in `config.py` sets how long posts can be starred.
