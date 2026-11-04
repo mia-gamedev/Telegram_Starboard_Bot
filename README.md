@@ -8,7 +8,7 @@ A Discord-style starboard for a Telegram group with topics. When a post in the w
 
 ## Setup
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `BOT_TOKEN=...` (`install.ps1` asks for it if it's missing).
+1. Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `BOT_TOKEN=...`.
 2. Start the bot (see below), add it to the group and make it an **admin**. Telegram only sends reactions to admin bots.
 3. As a group admin, in the group:
    - send `/setup` in the topic that should become the starboard,
