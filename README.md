@@ -28,15 +28,29 @@ Group admins can change the rules with `/settings` in the group. On its own, it 
 
 Each group has its own settings, saved in the database too.
 
-## Run it
+## Build and run it
 
-With Python 3.10 or newer. There's nothing to install: the bot only uses Python's standard library.
+The bot is written in Rust. Build it once with [Rust](https://rustup.rs):
 
 ```
-python starboard_bot.py
+cargo build --release
 ```
 
-If `BOT_TOKEN` is missing or invalid, the bot stops right away. The bot only works while it's running, so run it on a computer that stays on. Stop it with Ctrl+C, and restart it after editing `.env` by hand.
+On Windows, Rust's GNU toolchain works without Visual Studio, as long as MSYS2's `gcc` (`C:\msys64\mingw64\bin`) is on the PATH to compile SQLite.
+
+This makes a single program, `target/release/starboard_bot.exe`, that needs nothing else installed. Put it in a folder together with your `.env` and run it from there: it keeps `starboard.db` and `bot.log` in the folder it's started from.
+
+If `BOT_TOKEN` is missing or invalid, the bot stops right away and says why in `bot.log`. The bot only works while it's running, so run it on a computer that stays on. Stop it with Ctrl+C, and restart it after editing `.env` by hand.
+
+## Tests
+
+```
+cargo test                                       # behaviour and unit tests, Telegram faked
+cargo test --test network -- --ignored           # talks to the real Telegram API with a fake token
+cargo run --release --example bench [-- --tls]   # RAM and CPU against 50,000 groups / 12.2 million posts
+```
+
+The tests never touch your `.env`, `starboard.db` or `bot.log`. The benchmark builds its ~600 MB test database in your temp folder on first use.
 
 ## Good to know
 
@@ -44,8 +58,8 @@ If `BOT_TOKEN` is missing or invalid, the bot stops right away. The bot only wor
 - Anyone can add the bot to their group and set it up there; admins can only change their own group. To keep it to your own groups, send `/setjoingroups` to @BotFather and choose *Disable* once it's in them.
 - Telegram doesn't tell bots which topic a reacted message is in, so the bot remembers watched posts as they're made. Posts from before it was running, or before `/watch`, never count.
 - Setup, settings and tracked posts are kept in `starboard.db` (SQLite) next to the bot. Changes are saved after every batch of updates; if the bot is stopped mid-batch, Telegram sends that batch again, so restarts and crashes are fine. The bot stores only numeric Telegram IDs, no names or message text.
-- It's built to be light: about 20–26 MB of RAM and roughly 13 µs of CPU per update, measured with 50,000 groups and 12 million tracked posts. With that many groups, keep `starboard.db` on an SSD.
+- It's built to be light: about 8–10 MB of RAM and roughly 7–8 µs of CPU per update, measured with 50,000 groups and 12 million tracked posts. With that many groups, keep `starboard.db` on an SSD.
 - Coming from the version that kept setup in `.env`: run `/setup` and `/watch` again. `GROUP_ID`, the topic IDs and the settings in `.env` are no longer read.
-- The bot logs to the console and to `bot.log` next to it. The log is capped at about 2 MB: `bot.log` plus one older `bot.log.1`.
+- The bot logs to the console and to `bot.log`, with times in UTC. The log is capped at about 2 MB: `bot.log` plus one older `bot.log.1`.
 - `.env` holds the bot token. Keep it private.
-- `MAX_POST_AGE_SECONDS` and `MAX_TRACKED_POSTS` in `config.py` set how long, and how many of a group's latest posts, can still be starred.
+- `MAX_POST_AGE_SECONDS` and `MAX_TRACKED_POSTS` in `src/config.rs` set how long, and how many of a group's latest posts, can still be starred.

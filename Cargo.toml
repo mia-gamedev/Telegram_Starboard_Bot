@@ -1,0 +1,15 @@
+[package]
+name = "starboard_bot"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+native-tls = "0.2.18"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = { version = "1.0.154", features = ["raw_value"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

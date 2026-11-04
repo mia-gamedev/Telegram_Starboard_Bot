@@ -8,3 +8,5 @@ __pycache__/
 *.ps1
 Claude.MD
 .claude/
+/target
+*.exe
