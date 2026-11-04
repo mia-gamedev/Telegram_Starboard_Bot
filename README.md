@@ -8,7 +8,7 @@ A Discord-style starboard for Telegram groups with topics. When a post in the wa
 
 ## Setup
 
-1. Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `BOT_TOKEN=...` (`install.ps1` asks for it if it's missing).
+1. Create a bot with [@BotFather](https://t.me/BotFather) and put its token in `.env` as `BOT_TOKEN=...`.
 2. Start the bot (see below), add it to the group and make it an **admin**. Telegram only sends reactions to admin bots.
 3. As a group admin, in the group:
    - send `/setup` in the topic that should become the starboard,
@@ -37,16 +37,6 @@ python starboard_bot.py
 ```
 
 If `BOT_TOKEN` is missing or invalid, the bot stops right away. The bot only works while it's running, so run it on a computer that stays on. Stop it with Ctrl+C, and restart it after editing `.env` by hand.
-
-### In the background on Windows
-
-From an Administrator PowerShell in this folder:
-
-```
-powershell -ExecutionPolicy Bypass -File .\install.ps1
-```
-
-This checks the token with Telegram and installs a `StarboardBot` task that starts with Windows and restarts the bot if it stops. `uninstall.ps1` removes it.
 
 ## Good to know
 
