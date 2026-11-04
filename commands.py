@@ -1,17 +1,37 @@
-from telegram import Chat, Message, Update
-from telegram.constants import ChatMemberStatus
-from telegram.ext import Application, CommandHandler, ContextTypes, filters
-
-import config
 import database
+import telegram_api as telegram
+from config import ALLOWED_EMOJI
 from database import Group
 
-Context = ContextTypes.DEFAULT_TYPE
-
 BULLET = "•"
-ADMIN_STATUSES = {ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER}
-GROUP_COMMAND = filters.UpdateType.MESSAGE & filters.ChatType.GROUPS
-PRIVATE_COMMAND = filters.UpdateType.MESSAGE & filters.ChatType.PRIVATE
+ADMIN_STATUSES = {"administrator", "creator"}
+GROUP_CHAT_TYPES = {"group", "supergroup"}
+
+
+def handle_command(message: dict) -> None:
+    command, *args = message["text"].split()
+    name, _, addressee = command[1:].partition("@")
+    if addressee and addressee.lower() != telegram.bot_account["username"].lower():
+        return
+    handler = GROUP_COMMANDS.get(name)
+    if handler is None:
+        return
+    chat_type = message["chat"]["type"]
+    if chat_type == "private":
+        explain_group_only(message)
+    elif chat_type in GROUP_CHAT_TYPES:
+        handler(message, args)
+
+
+def reply(message: dict, text: str) -> None:
+    params = {
+        "chat_id": message["chat"]["id"],
+        "text": text,
+        "reply_parameters": {"message_id": message["message_id"], "allow_sending_without_reply": True},
+    }
+    if message.get("is_topic_message"):
+        params["message_thread_id"] = message["message_thread_id"]
+    telegram.call("sendMessage", **params)
 
 
 def describe_settings(group: Group) -> str:
@@ -23,120 +43,112 @@ def describe_settings(group: Group) -> str:
     )
 
 
-async def is_admin(chat: Chat, user_id: int) -> bool:
-    member = await chat.get_member(user_id)
-    return member.status in ADMIN_STATUSES
+def is_admin(chat_id: int, user_id: int) -> bool:
+    member = telegram.call("getChatMember", chat_id=chat_id, user_id=user_id)
+    return member["status"] in ADMIN_STATUSES
 
 
-async def sent_by_admin(message: Message) -> bool:
+def sent_by_admin(message: dict) -> bool:
     # Anonymous admins post as the group itself.
-    if message.sender_chat:
-        return message.sender_chat.id == message.chat_id
-    return await is_admin(message.chat, message.from_user.id)
+    if "sender_chat" in message:
+        return message["sender_chat"]["id"] == message["chat"]["id"]
+    return is_admin(message["chat"]["id"], message["from"]["id"])
 
 
-async def allowed_to_configure(message: Message) -> bool:
-    if await sent_by_admin(message):
+def allowed_to_configure(message: dict) -> bool:
+    if sent_by_admin(message):
         return True
-    await message.reply_text("Only group admins can do that.")
+    reply(message, "Only group admins can do that.")
     return False
 
 
-async def set_required_hearts(message: Message, rest: list) -> None:
-    hearts = int(rest[0]) if len(rest) == 1 and rest[0].isdigit() else 0
+def set_required_hearts(message: dict, args: list) -> None:
+    hearts = int(args[0]) if len(args) == 1 and args[0].isdecimal() else 0
     if hearts < 1:
-        await message.reply_text("Usage: /settings required-hearts <positive number>")
+        reply(message, "Usage: /settings required-hearts <positive number>")
         return
-    database.save_group_setting(message.chat_id, "required_hearts", hearts)
-    await message.reply_text(f"Posts now need {hearts} hearts to reach the starboard.")
+    database.save_group_setting(message["chat"]["id"], "required_hearts", hearts)
+    reply(message, f"Posts now need {hearts} hearts to reach the starboard.")
 
 
-async def set_emoji(message: Message, rest: list) -> None:
-    if len(rest) != 1 or rest[0] not in config.ALLOWED_EMOJI:
-        await message.reply_text(
-            "Send one emoji Telegram allows as a reaction, e.g. /settings emoji 🔥"
-        )
+def set_emoji(message: dict, args: list) -> None:
+    if len(args) != 1 or args[0] not in ALLOWED_EMOJI:
+        reply(message, "Send one emoji Telegram allows as a reaction, e.g. /settings emoji 🔥")
         return
-    database.save_group_setting(message.chat_id, "emoji", rest[0])
-    await message.reply_text(f"Reaction emoji set to {rest[0]}.")
+    database.save_group_setting(message["chat"]["id"], "emoji", args[0])
+    reply(message, f"Reaction emoji set to {args[0]}.")
 
 
-async def set_self_stars(message: Message, rest: list) -> None:
-    choice = rest[0].lower() if len(rest) == 1 else ""
+def set_self_stars(message: dict, args: list) -> None:
+    choice = args[0].lower() if len(args) == 1 else ""
     if choice not in {"true", "false"}:
-        await message.reply_text("Usage: /settings self-stars <true|false>")
+        reply(message, "Usage: /settings self-stars <true|false>")
         return
-    database.save_group_setting(message.chat_id, "self_stars", choice == "true")
-    await message.reply_text(f"Counting the author's own reaction: {choice}.")
+    database.save_group_setting(message["chat"]["id"], "self_stars", choice == "true")
+    reply(message, f"Counting the author's own reaction: {choice}.")
 
 
-async def settings_command(update: Update, context: Context) -> None:
-    message = update.effective_message
-    if not await allowed_to_configure(message):
+SETTING_HANDLERS = {
+    "required-hearts": set_required_hearts,
+    "emoji": set_emoji,
+    "self-stars": set_self_stars,
+}
+
+
+def settings_command(message: dict, args: list) -> None:
+    if not allowed_to_configure(message):
         return
-    if not context.args:
-        await message.reply_text(describe_settings(database.load_group(message.chat_id)))
+    if not args:
+        reply(message, describe_settings(database.load_group(message["chat"]["id"])))
         return
-    setting, *rest = context.args
-    match setting:
-        case "required-hearts":
-            await set_required_hearts(message, rest)
-        case "emoji":
-            await set_emoji(message, rest)
-        case "self-stars":
-            await set_self_stars(message, rest)
-        case _:
-            await message.reply_text("Unknown setting. Use required-hearts, emoji or self-stars.")
+    setting, *rest = args
+    handler = SETTING_HANDLERS.get(setting)
+    if handler is None:
+        reply(message, "Unknown setting. Use required-hearts, emoji or self-stars.")
+        return
+    handler(message, rest)
 
 
-async def save_current_topic(message: Message, topic_setting: str) -> Group | None:
-    if not await allowed_to_configure(message):
+def save_current_topic(message: dict, topic_setting: str) -> Group | None:
+    if not allowed_to_configure(message):
         return None
-    if not message.is_topic_message:
-        await message.reply_text("Run this inside a topic other than General.")
+    if not message.get("is_topic_message"):
+        reply(message, "Run this inside a topic other than General.")
         return None
-    if not await is_admin(message.chat, message.get_bot().id):
-        await message.reply_text(
-            "Make me a group admin first: Telegram only sends reactions to admin bots."
-        )
+    chat_id = message["chat"]["id"]
+    if not is_admin(chat_id, telegram.bot_account["id"]):
+        reply(message, "Make me a group admin first: Telegram only sends reactions to admin bots.")
         return None
-    database.save_group_setting(message.chat_id, topic_setting, message.message_thread_id)
-    return database.find_group(message.chat_id)
+    database.save_group_setting(chat_id, topic_setting, message["message_thread_id"])
+    return database.find_group(chat_id)
 
 
-async def setup_command(update: Update, context: Context) -> None:
-    message = update.effective_message
-    group = await save_current_topic(message, "starboard_topic_id")
+def setup_command(message: dict, args: list) -> None:
+    group = save_current_topic(message, "starboard_topic_id")
     if group is None:
         return
     next_step = "" if group.music_topic_id else (
         "\nNext, run /watch in the topic whose posts can be starred."
     )
-    await message.reply_text(f"This topic is now the starboard.{next_step}")
+    reply(message, f"This topic is now the starboard.{next_step}")
 
 
-async def watch_command(update: Update, context: Context) -> None:
-    message = update.effective_message
-    group = await save_current_topic(message, "music_topic_id")
+def watch_command(message: dict, args: list) -> None:
+    group = save_current_topic(message, "music_topic_id")
     if group is None:
         return
     next_step = "" if group.starboard_topic_id else (
         "\nNext, run /setup in the topic that should be the starboard."
     )
-    await message.reply_text(f"Posts with audio or a link in this topic can now be starred.{next_step}")
+    reply(message, f"Posts with audio or a link in this topic can now be starred.{next_step}")
 
 
-async def explain_group_only(update: Update, context: Context) -> None:
-    await update.effective_message.reply_text(
+def explain_group_only(message: dict) -> None:
+    reply(
+        message,
         "My commands work in the group, for group admins: run /setup in the topic that should be "
-        "the starboard and /watch in the topic whose posts can be starred."
+        "the starboard and /watch in the topic whose posts can be starred.",
     )
 
 
-def register(app: Application) -> None:
-    app.add_handler(CommandHandler("settings", settings_command, GROUP_COMMAND))
-    app.add_handler(CommandHandler("setup", setup_command, GROUP_COMMAND))
-    app.add_handler(CommandHandler("watch", watch_command, GROUP_COMMAND))
-    app.add_handler(
-        CommandHandler(["settings", "setup", "watch"], explain_group_only, PRIVATE_COMMAND)
-    )
+GROUP_COMMANDS = {"settings": settings_command, "setup": setup_command, "watch": watch_command}

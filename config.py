@@ -1,38 +1,41 @@
-import logging
 import os
 import re
-from datetime import timedelta
-from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-from dotenv import load_dotenv
-from telegram.constants import ReactionEmoji
+import log
 
-ENV_FILE = Path(__file__).with_name(".env")
-DATABASE_FILE = Path(__file__).with_name("starboard.db")
-LOG_FILE = Path(__file__).with_name("bot.log")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ENV_FILE = os.path.join(BASE_DIR, ".env")
+DATABASE_FILE = os.path.join(BASE_DIR, "starboard.db")
 
-log_file = RotatingFileHandler(LOG_FILE, maxBytes=10**6, backupCount=1, encoding="utf8")
-logging.basicConfig(
-    format="%(asctime)s %(levelname)s %(message)s",
-    level=logging.INFO,
-    handlers=[logging.StreamHandler(), log_file],
-)
-logging.getLogger("httpx").setLevel(logging.WARNING)  # request logs contain the token
-logger = logging.getLogger(__name__)
-
-MAX_POST_AGE = timedelta(days=30)
+MAX_POST_AGE_SECONDS = 30 * 24 * 60 * 60
 MAX_TRACKED_POSTS = 1000
 DEFAULT_REQUIRED_HEARTS = 2
-DEFAULT_EMOJI = ReactionEmoji.RED_HEART.value
-ALLOWED_EMOJI = frozenset(emoji.value for emoji in ReactionEmoji)
+DEFAULT_EMOJI = "❤"
+# Every emoji Telegram accepts as a reaction (Bot API, ReactionTypeEmoji).
+ALLOWED_EMOJI = frozenset(
+    "👍 👎 ❤ 🔥 🥰 👏 😁 🤔 🤯 😱 🤬 😢 🎉 🤩 🤮 💩 🙏 👌 🕊 🤡 🥱 🥴 😍 🐳 ❤️‍🔥 🌚 🌭 💯 🤣 ⚡ 🍌 "
+    "🏆 💔 🤨 😐 🍓 🍾 💋 🖕 😈 😴 😭 🤓 👻 👨‍💻 👀 🎃 🙈 😇 😨 🤝 ✍ 🤗 🫡 🎅 🎄 ☃ 💅 🤪 🗿 🆒 "
+    "💘 🙉 🦄 😘 💊 🙊 😎 👾 🤷‍♂️ 🤷 🤷‍♀️ 😡".split()
+)
+
+
+def read_env_file() -> dict:
+    if not os.path.exists(ENV_FILE):
+        return {}
+    with open(ENV_FILE, encoding="utf8") as env_file:
+        lines = env_file.read().splitlines()
+    settings = {}
+    for line in lines:
+        key, separator, value = line.partition("=")
+        if separator and not key.strip().startswith("#"):
+            settings[key.strip()] = value.strip().strip("\"'")
+    return settings
 
 
 def read_bot_token() -> str:
-    load_dotenv(ENV_FILE)
-    token = os.environ.get("BOT_TOKEN", "").strip()
+    token = (os.environ.get("BOT_TOKEN") or read_env_file().get("BOT_TOKEN", "")).strip()
     if not re.fullmatch(r"\d+:[\w-]+", token):
-        logger.critical("BOT_TOKEN is missing or invalid in .env")
+        log.write("CRITICAL", "BOT_TOKEN is missing or invalid in .env")
         raise SystemExit(1)
     return token
 

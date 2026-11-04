@@ -1,8 +1,6 @@
 import sqlite3
-from dataclasses import dataclass
-from datetime import datetime
-
-from telegram import ReactionTypeEmoji
+from collections import namedtuple
+from contextlib import contextmanager
 
 from config import DATABASE_FILE, DEFAULT_EMOJI, DEFAULT_REQUIRED_HEARTS
 
@@ -28,44 +26,41 @@ CREATE TABLE IF NOT EXISTS posts (
 GROUP_SETTINGS = {"music_topic_id", "starboard_topic_id", "required_hearts", "emoji", "self_stars"}
 
 
-@dataclass
-class Group:
-    chat_id: int
-    music_topic_id: int | None
-    starboard_topic_id: int | None
-    required_hearts: int
-    emoji: str
-    self_stars: bool
+# namedtuple rather than dataclass: dataclasses would load ~1.5 MB of extra modules.
+class Group(namedtuple("Group", "chat_id music_topic_id starboard_topic_id required_hearts emoji self_stars")):
+    __slots__ = ()
 
     @property
     def is_set_up(self) -> bool:
         return None not in (self.music_topic_id, self.starboard_topic_id)
 
-    @property
-    def heart_reaction(self) -> ReactionTypeEmoji:
-        return ReactionTypeEmoji(self.emoji)
+
+Post = namedtuple("Post", "chat_id message_id author_id posted_at hearts")
 
 
-@dataclass
-class Post:
-    chat_id: int
-    message_id: int
-    author_id: int
-    posted_at: int
-    hearts: int
-
-
-# Each statement commits on its own, so every change is on disk as soon as it's made.
 connection = sqlite3.connect(DATABASE_FILE, isolation_level=None)
-connection.row_factory = sqlite3.Row
+# WAL with synchronous=NORMAL saves without waiting on the disk for every change;
+# a crash can't corrupt the file, at worst the last moment of changes before a power cut is lost.
+connection.execute("PRAGMA journal_mode = WAL")
+connection.execute("PRAGMA synchronous = NORMAL")
+# 500 KB instead of SQLite's 2 MB default: measured no slower, since the OS file cache serves misses.
+connection.execute("PRAGMA cache_size = -500")
 connection.executescript(SCHEMA)
+
+
+@contextmanager
+def transaction():
+    connection.execute("BEGIN")
+    with connection:
+        yield
 
 
 def find_group(chat_id: int) -> Group | None:
     row = connection.execute("SELECT * FROM groups WHERE chat_id = ?", (chat_id,)).fetchone()
     if row is None:
         return None
-    return Group(**{**dict(row), "self_stars": bool(row["self_stars"])})
+    *columns, self_stars = row
+    return Group(*columns, bool(self_stars))
 
 
 def load_group(chat_id: int) -> Group:
@@ -84,10 +79,10 @@ def save_group_setting(chat_id: int, setting: str, value: object) -> None:
     )
 
 
-def remember_post(chat_id: int, message_id: int, author_id: int, posted_at: datetime) -> None:
+def remember_post(chat_id: int, message_id: int, author_id: int, posted_at: int) -> None:
     connection.execute(
         "INSERT OR IGNORE INTO posts (chat_id, message_id, author_id, posted_at) VALUES (?, ?, ?, ?)",
-        (chat_id, message_id, author_id, int(posted_at.timestamp())),
+        (chat_id, message_id, author_id, posted_at),
     )
 
 
@@ -104,13 +99,13 @@ def find_post(chat_id: int, message_id: int) -> Post | None:
     row = connection.execute(
         "SELECT * FROM posts WHERE chat_id = ? AND message_id = ?", (chat_id, message_id)
     ).fetchone()
-    return Post(**row) if row else None
+    return Post(*row) if row else None
 
 
-def save_hearts(post: Post) -> None:
+def save_hearts(chat_id: int, message_id: int, hearts: int) -> None:
     connection.execute(
         "UPDATE posts SET hearts = ? WHERE chat_id = ? AND message_id = ?",
-        (post.hearts, post.chat_id, post.message_id),
+        (hearts, chat_id, message_id),
     )
 
 
@@ -120,11 +115,9 @@ def forget_post(chat_id: int, message_id: int) -> None:
     )
 
 
-def forget_group_posts_before(chat_id: int, cutoff: datetime) -> None:
-    connection.execute(
-        "DELETE FROM posts WHERE chat_id = ? AND posted_at < ?", (chat_id, int(cutoff.timestamp()))
-    )
+def forget_group_posts_before(chat_id: int, cutoff: int) -> None:
+    connection.execute("DELETE FROM posts WHERE chat_id = ? AND posted_at < ?", (chat_id, cutoff))
 
 
-def forget_posts_before(cutoff: datetime) -> None:
-    connection.execute("DELETE FROM posts WHERE posted_at < ?", (int(cutoff.timestamp()),))
+def forget_posts_before(cutoff: int) -> None:
+    connection.execute("DELETE FROM posts WHERE posted_at < ?", (cutoff,))

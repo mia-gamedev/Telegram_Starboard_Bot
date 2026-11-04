@@ -1,2 +1,1 @@
-python-telegram-bot>=22.8,<23
-python-dotenv>=1.0,<2
+# No third-party packages: the bot only uses Python's standard library (Python 3.10+).

@@ -30,10 +30,9 @@ Each group has its own settings, saved in the database too.
 
 ## Run it
 
-With Python 3.10 or newer:
+With Python 3.10 or newer. There's nothing to install: the bot only uses Python's standard library.
 
 ```
-pip install -r requirements.txt
 python starboard_bot.py
 ```
 
@@ -54,8 +53,9 @@ This checks the token with Telegram and installs a `StarboardBot` task that star
 - Only one copy of the bot can run per token.
 - Anyone can add the bot to their group and set it up there; admins can only change their own group. To keep it to your own groups, send `/setjoingroups` to @BotFather and choose *Disable* once it's in them.
 - Telegram doesn't tell bots which topic a reacted message is in, so the bot remembers watched posts as they're made. Posts from before it was running, or before `/watch`, never count.
-- Setup, settings and tracked posts are kept in `starboard.db` (SQLite) next to the bot. Each change is saved as it happens, so restarts and crashes are fine. The bot stores only numeric Telegram IDs, no names or message text.
+- Setup, settings and tracked posts are kept in `starboard.db` (SQLite) next to the bot. Changes are saved after every batch of updates; if the bot is stopped mid-batch, Telegram sends that batch again, so restarts and crashes are fine. The bot stores only numeric Telegram IDs, no names or message text.
+- It's built to be light: about 20–26 MB of RAM and roughly 13 µs of CPU per update, measured with 50,000 groups and 12 million tracked posts. With that many groups, keep `starboard.db` on an SSD.
 - Coming from the version that kept setup in `.env`: run `/setup` and `/watch` again. `GROUP_ID`, the topic IDs and the settings in `.env` are no longer read.
 - The bot logs to the console and to `bot.log` next to it. The log is capped at about 2 MB: `bot.log` plus one older `bot.log.1`.
 - `.env` holds the bot token. Keep it private.
-- `MAX_POST_AGE` and `MAX_TRACKED_POSTS` in `config.py` set how long, and how many of a group's latest posts, can still be starred.
+- `MAX_POST_AGE_SECONDS` and `MAX_TRACKED_POSTS` in `config.py` set how long, and how many of a group's latest posts, can still be starred.
